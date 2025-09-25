@@ -1,10 +1,10 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { authComponent } from "./auth";
 import { internal } from "./_generated/api";
 
-// Log system events
-export const logSystemEvent = mutation({
+// Log system events (internal)
+export const logSystemEvent = internalMutation({
 	args: {
 		level: v.union(
 			v.literal("info"),
@@ -62,9 +62,9 @@ export const getRecentLogs = query({
 		// Use proper query structure
 		let queryBuilder;
 		if (args.level) {
-			queryBuilder = ctx.db.query("systemLogs").withIndex("by_level", (q) => q.eq("level", args.level));
+			queryBuilder = ctx.db.query("systemLogs").withIndex("by_level", (q) => q.eq("level", args.level!));
 		} else if (args.category) {
-			queryBuilder = ctx.db.query("systemLogs").withIndex("by_category", (q) => q.eq("category", args.category));
+			queryBuilder = ctx.db.query("systemLogs").withIndex("by_category", (q) => q.eq("category", args.category!));
 		} else {
 			queryBuilder = ctx.db.query("systemLogs").withIndex("by_time");
 		}

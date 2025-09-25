@@ -1,4 +1,4 @@
-import { query, mutation, action } from "./_generated/server";
+import { query, mutation, action, internalQuery, internalMutation, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { authComponent } from "./auth";
 import { internal } from "./_generated/api";
@@ -73,8 +73,8 @@ export const getServerDeployments = query({
 	},
 });
 
-// Get a specific deployment
-export const getDeployment = query({
+// Get a specific deployment (internal)
+export const getDeployment = internalQuery({
 	args: { deploymentId: v.id("deployments") },
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
@@ -163,8 +163,8 @@ export const createDeployment = mutation({
 	},
 });
 
-// Update deployment status
-export const updateDeploymentStatus = mutation({
+// Update deployment status (internal)
+export const updateDeploymentStatus = internalMutation({
 	args: {
 		deploymentId: v.id("deployments"),
 		status: v.union(
@@ -219,7 +219,7 @@ export const deleteDeployment = mutation({
 });
 
 // WordPress deployment action (placeholder implementation)
-export const deployWordPress = action({
+export const deployWordPress = internalAction({
 	args: { deploymentId: v.id("deployments") },
 	handler: async (ctx, args) => {
 		// This is a placeholder for the actual Dokploy API integration
@@ -265,7 +265,7 @@ export const deployWordPress = action({
 });
 
 // WordPress destruction action (placeholder implementation)
-export const destroyWordPress = action({
+export const destroyWordPress = internalAction({
 	args: { deploymentId: v.id("deployments") },
 	handler: async (ctx, args) => {
 		// This is a placeholder for the actual Dokploy API integration
@@ -289,7 +289,7 @@ export const destroyWordPress = action({
 });
 
 // Internal mutation to delete deployment record from database
-export const deleteDeploymentRecord = mutation({
+export const deleteDeploymentRecord = internalMutation({
 	args: { deploymentId: v.id("deployments") },
 	handler: async (ctx, args) => {
 		await ctx.db.delete(args.deploymentId);

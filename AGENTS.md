@@ -11,10 +11,10 @@
 
 ## Error Checking Guidelines
 
-- **NEVER** start the development server (`pnpm dev:server`) just to check for TypeScript errors
-- **ALWAYS** use TypeScript LSP/Language Server to check for errors in real-time
-- Use `pnpm check-types` for comprehensive type checking across all workspaces if needed
-- The LSP provides immediate feedback without the overhead of starting servers
+- **PREFER** TypeScript LSP/Language Server for real-time error checking over starting dev servers
+- Use `pnpm check-types` for comprehensive type checking across all workspaces 
+- **CAN** start `pnpm dev:server` when needed to regenerate Convex API types (`_generated/api.d.ts`)
+- The LSP provides immediate feedback, but Convex dev is required to generate function references
 
 ## Code Style & Conventions
 

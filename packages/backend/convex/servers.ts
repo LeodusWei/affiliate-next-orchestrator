@@ -1,4 +1,4 @@
-import { query, mutation, action } from "./_generated/server";
+import { query, mutation, action, internalQuery, internalMutation, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { authComponent } from "./auth";
 import { internal } from "./_generated/api";
@@ -30,8 +30,8 @@ export const getUserServers = query({
 	},
 });
 
-// Get a specific server by ID
-export const getServer = query({
+// Get a specific server by ID (internal)
+export const getServer = internalQuery({
 	args: { serverId: v.id("servers") },
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
@@ -98,7 +98,7 @@ export const createServer = mutation({
 });
 
 // Update server status
-export const updateServerStatus = mutation({
+export const updateServerStatus = internalMutation({
 	args: {
 		serverId: v.id("servers"),
 		status: v.union(
@@ -161,7 +161,7 @@ export const deleteServer = mutation({
 });
 
 // Server provisioning action (placeholder implementation)
-export const provisionServer = action({
+export const provisionServer = internalAction({
 	args: { serverId: v.id("servers") },
 	handler: async (ctx, args) => {
 		// This is a placeholder for the actual Hetzner API integration
@@ -212,7 +212,7 @@ export const provisionServer = action({
 });
 
 // Server destruction action (placeholder implementation)
-export const destroyServer = action({
+export const destroyServer = internalAction({
 	args: { serverId: v.id("servers") },
 	handler: async (ctx, args) => {
 		// This is a placeholder for the actual Hetzner API integration
@@ -241,7 +241,7 @@ export const destroyServer = action({
 });
 
 // Internal mutation to delete server record from database
-export const deleteServerRecord = mutation({
+export const deleteServerRecord = internalMutation({
 	args: { serverId: v.id("servers") },
 	handler: async (ctx, args) => {
 		await ctx.db.delete(args.serverId);
