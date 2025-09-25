@@ -1,6 +1,9 @@
-import { query, mutation, action } from "./_generated/server";
+import { query, mutation, action, internalQuery, internalMutation, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { authComponent } from "./auth";
+
+// Note: For MVP, we're storing API keys without encryption
+// In production, implement proper encryption with a secure key management system
 
 // Get user's API keys
 export const getUserApiKeys = query({
@@ -45,10 +48,11 @@ export const storeApiKeys = mutation({
 			throw new Error("Not authenticated");
 		}
 
-		// For MVP, we'll store keys as-is. In production, implement encryption here
-		// TODO: Implement proper encryption for sensitive data
-		const encryptedHetznerKey = args.hetznerApiKey;
-		const encryptedDokployKey = args.dokployApiKey;
+		try {
+			// For MVP, store keys as-is. In production, implement proper encryption
+			// TODO: Implement encryption by calling internal actions
+			const encryptedHetznerKey = args.hetznerApiKey;
+			const encryptedDokployKey = args.dokployApiKey;
 
 		const existingKeys = await ctx.db
 			.query("apiKeys")
@@ -67,20 +71,25 @@ export const storeApiKeys = mutation({
 			});
 			return existingKeys._id;
 		} else {
-			// Create new keys record
-			return await ctx.db.insert("apiKeys", {
-				userId: user._id,
-				hetznerApiKey: encryptedHetznerKey,
-				dokployApiKey: encryptedDokployKey,
-				dokployUrl: args.dokployUrl,
-				isHetznerValid: false,
-				isDokployValid: false,
-			});
-		}
+		// Create new keys record
+		return await ctx.db.insert("apiKeys", {
+			userId: user._id,
+			hetznerApiKey: encryptedHetznerKey,
+			dokployApiKey: encryptedDokployKey,
+			dokployUrl: args.dokployUrl,
+			isHetznerValid: false,
+			isDokployValid: false,
+		});
+	}
+
+	} catch (error) {
+		console.error("Error storing API keys:", error);
+		throw new Error("Failed to store API keys");
+	}
 	},
 });
 
-// Validate API keys (placeholder implementation)
+// Validate API keys with real API calls  
 export const validateApiKeys = action({
 	args: {
 		hetznerApiKey: v.optional(v.string()),
@@ -96,30 +105,51 @@ export const validateApiKeys = action({
 		// Validate Hetzner API key
 		if (args.hetznerApiKey) {
 			try {
-				// TODO: Implement actual Hetzner API validation
-				// For now, just check if it looks like a valid key format
-				if (args.hetznerApiKey.length > 10) {
+				const response = await fetch("https://api.hetzner.cloud/v1/locations", {
+					method: "GET",
+					headers: {
+						"Authorization": `Bearer ${args.hetznerApiKey}`,
+						"Content-Type": "application/json",
+					},
+				});
+
+				if (response.ok) {
 					hetznerValid = true;
+				} else if (response.status === 401) {
+					errors.push("Invalid Hetzner API key - authentication failed");
 				} else {
-					errors.push("Invalid Hetzner API key format");
+					errors.push("Failed to validate Hetzner API key - API error");
 				}
 			} catch (error) {
-				errors.push("Failed to validate Hetzner API key");
+				console.error("Hetzner API validation error:", error);
+				errors.push("Failed to connect to Hetzner API");
 			}
 		}
 
 		// Validate Dokploy API key
 		if (args.dokployApiKey && args.dokployUrl) {
 			try {
-				// TODO: Implement actual Dokploy API validation
-				// For now, just check basic format
-				if (args.dokployApiKey.length > 10 && args.dokployUrl.startsWith("http")) {
+				// Ensure URL has proper format
+				const baseUrl = args.dokployUrl.endsWith("/") ? args.dokployUrl.slice(0, -1) : args.dokployUrl;
+				
+				const response = await fetch(`${baseUrl}/api/auth/profile`, {
+					method: "GET",
+					headers: {
+						"Authorization": `Bearer ${args.dokployApiKey}`,
+						"Content-Type": "application/json",
+					},
+				});
+
+				if (response.ok) {
 					dokployValid = true;
+				} else if (response.status === 401) {
+					errors.push("Invalid Dokploy API key - authentication failed");
 				} else {
-					errors.push("Invalid Dokploy API key or URL format");
+					errors.push("Failed to validate Dokploy API key - API error");
 				}
 			} catch (error) {
-				errors.push("Failed to validate Dokploy API key");
+				console.error("Dokploy API validation error:", error);
+				errors.push("Failed to connect to Dokploy API - check URL and network connectivity");
 			}
 		}
 
@@ -158,5 +188,72 @@ export const updateValidationStatus = mutation({
 		}
 
 		return null;
+	},
+});
+
+// Internal function to get decrypted API keys for use in other functions
+export const getDecryptedApiKeys = internalQuery({
+	args: { userId: v.string() },
+	handler: async (ctx, args) => {
+		const apiKeys = await ctx.db
+			.query("apiKeys")
+			.withIndex("by_user", (q) => q.eq("userId", args.userId))
+			.unique();
+
+		if (!apiKeys) {
+			return null;
+		}
+
+		return {
+			hetznerApiKey: apiKeys.hetznerApiKey,
+			dokployApiKey: apiKeys.dokployApiKey,
+			dokployUrl: apiKeys.dokployUrl,
+			isHetznerValid: apiKeys.isHetznerValid,
+			isDokployValid: apiKeys.isDokployValid,
+		};
+	},
+});
+
+// Delete API keys
+export const deleteApiKeys = mutation({
+	args: { service: v.optional(v.union(v.literal("hetzner"), v.literal("dokploy"), v.literal("all"))) },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) {
+			throw new Error("Not authenticated");
+		}
+
+		const apiKeys = await ctx.db
+			.query("apiKeys")
+			.withIndex("by_user", (q) => q.eq("userId", user._id))
+			.unique();
+
+		if (!apiKeys) {
+			return null;
+		}
+
+		const service = args.service || "all";
+
+		if (service === "all") {
+			// Delete the entire record
+			await ctx.db.delete(apiKeys._id);
+		} else if (service === "hetzner") {
+			// Clear Hetzner keys
+			await ctx.db.patch(apiKeys._id, {
+				hetznerApiKey: undefined,
+				isHetznerValid: false,
+				lastValidated: undefined,
+			});
+		} else if (service === "dokploy") {
+		// Clear Dokploy keys
+		await ctx.db.patch(apiKeys._id, {
+			dokployApiKey: undefined,
+			dokployUrl: undefined,
+			isDokployValid: false,
+			lastValidated: undefined,
+		});
+	}
+
+	return null;
 	},
 });
