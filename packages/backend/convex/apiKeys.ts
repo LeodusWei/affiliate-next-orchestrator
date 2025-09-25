@@ -5,15 +5,6 @@ import { authComponent } from "./auth";
 // Get user's API keys
 export const getUserApiKeys = query({
 	args: {},
-	returns: v.optional(v.object({
-		_id: v.id("apiKeys"),
-		hasHetznerKey: v.boolean(),
-		hasDokployKey: v.boolean(),
-		dokployUrl: v.optional(v.string()),
-		isHetznerValid: v.boolean(),
-		isDokployValid: v.boolean(),
-		lastValidated: v.optional(v.number()),
-	})),
 	handler: async (ctx) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) {
@@ -22,7 +13,7 @@ export const getUserApiKeys = query({
 
 		const apiKeys = await ctx.db
 			.query("apiKeys")
-			.withIndex("by_user", (q) => q.eq("userId", user.id))
+			.withIndex("by_user", (q) => q.eq("userId", user._id))
 			.unique();
 
 		if (!apiKeys) {
@@ -48,7 +39,6 @@ export const storeApiKeys = mutation({
 		dokployApiKey: v.optional(v.string()),
 		dokployUrl: v.optional(v.string()),
 	},
-	returns: v.id("apiKeys"),
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) {
@@ -62,7 +52,7 @@ export const storeApiKeys = mutation({
 
 		const existingKeys = await ctx.db
 			.query("apiKeys")
-			.withIndex("by_user", (q) => q.eq("userId", user.id))
+			.withIndex("by_user", (q) => q.eq("userId", user._id))
 			.unique();
 
 		if (existingKeys) {
@@ -79,7 +69,7 @@ export const storeApiKeys = mutation({
 		} else {
 			// Create new keys record
 			return await ctx.db.insert("apiKeys", {
-				userId: user.id,
+				userId: user._id,
 				hetznerApiKey: encryptedHetznerKey,
 				dokployApiKey: encryptedDokployKey,
 				dokployUrl: args.dokployUrl,
@@ -97,11 +87,7 @@ export const validateApiKeys = action({
 		dokployApiKey: v.optional(v.string()),
 		dokployUrl: v.optional(v.string()),
 	},
-	returns: v.object({
-		hetznerValid: v.boolean(),
-		dokployValid: v.boolean(),
-		errors: v.array(v.string()),
-	}),
+
 	handler: async (ctx, args) => {
 		const errors: string[] = [];
 		let hetznerValid = false;
@@ -151,7 +137,7 @@ export const updateValidationStatus = mutation({
 		isHetznerValid: v.boolean(),
 		isDokployValid: v.boolean(),
 	},
-	returns: v.null(),
+
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) {
@@ -160,7 +146,7 @@ export const updateValidationStatus = mutation({
 
 		const apiKeys = await ctx.db
 			.query("apiKeys")
-			.withIndex("by_user", (q) => q.eq("userId", user.id))
+			.withIndex("by_user", (q) => q.eq("userId", user._id))
 			.unique();
 
 		if (apiKeys) {

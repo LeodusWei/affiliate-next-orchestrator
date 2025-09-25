@@ -9,6 +9,13 @@
 - `pnpm dev:server` - Run backend/Convex only
 - `pnpm dev:setup` - Initial Convex setup
 
+## Error Checking Guidelines
+
+- **NEVER** start the development server (`pnpm dev:server`) just to check for TypeScript errors
+- **ALWAYS** use TypeScript LSP/Language Server to check for errors in real-time
+- Use `pnpm check-types` for comprehensive type checking across all workspaces if needed
+- The LSP provides immediate feedback without the overhead of starting servers
+
 ## Code Style & Conventions
 
 - **TypeScript**: Strict mode enabled, use `type` imports when possible
@@ -26,6 +33,33 @@
 - UI components in `components/ui/` using Radix primitives
 - State management through Convex for backend data
 
+## Authentication Guidelines
+
+- Use `authComponent.getAuthUser(ctx)` to get the current authenticated user
+- The user object has an `_id` field (not `id`) which should be used for database relations
+- Always check if user exists before proceeding with authenticated operations
+
+```typescript
+import { authComponent } from "./auth";
+
+export const someQuery = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.getAuthUser(ctx);
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
+    // Use user._id for database operations
+    const userItems = await ctx.db
+      .query("items")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    
+    return userItems;
+  },
+});
+```
+
 ## Convex Guidelines
 
 # Convex guidelines
@@ -41,12 +75,13 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 export const f = query({
   args: {},
-  returns: v.null(),
   handler: async (ctx, args) => {
     // Function body
   },
 });
 ```
+
+- **NEVER** specify the `returns` field in Convex functions - Convex automatically infers return types
 
 ### Http endpoint syntax
 
@@ -108,7 +143,7 @@ export default defineSchema({
 });
 ```
 
-- Always use the `v.null()` validator when returning a null value. Below is an example query that returns a null value:
+- Below is an example query that returns a null value:
 
 ```typescript
 import { query } from "./_generated/server";
@@ -116,13 +151,14 @@ import { v } from "convex/values";
 
 export const exampleQuery = query({
   args: {},
-  returns: v.null(),
   handler: async (ctx, args) => {
     console.log("This query returns a null value");
     return null;
   },
 });
 ```
+
+- **NEVER** specify `returns` validators - Convex infers return types automatically
 
 - Here are the valid Convex types along with their respective validators:
   Convex Type | TS/JS type | Example Usage | Validator for argument validation and schemas | Notes |
@@ -143,7 +179,8 @@ export const exampleQuery = query({
 - Use `internalQuery`, `internalMutation`, and `internalAction` to register internal functions. These functions are private and aren't part of an app's API. They can only be called by other Convex functions. These functions are always imported from `./_generated/server`.
 - Use `query`, `mutation`, and `action` to register public functions. These functions are part of the public API and are exposed to the public Internet. Do NOT use `query`, `mutation`, or `action` to register sensitive internal functions that should be kept private.
 - You CANNOT register a function through the `api` or `internal` objects.
-- ALWAYS include argument and return validators for all Convex functions. This includes all of `query`, `internalQuery`, `mutation`, `internalMutation`, `action`, and `internalAction`. If a function doesn't return anything, include `returns: v.null()` as its output validator.
+- **NEVER** include `returns` validators for Convex functions - Convex automatically infers return types
+- ALWAYS include argument validators using the `args` field for all Convex functions
 - If the JavaScript implementation of a Convex function doesn't have a return value, it implicitly returns `null`.
 
 ### Function calling
@@ -159,7 +196,6 @@ export const exampleQuery = query({
 ```
 export const f = query({
   args: { name: v.string() },
-  returns: v.string(),
   handler: async (ctx, args) => {
     return "Hello " + args.name;
   },
@@ -167,7 +203,6 @@ export const f = query({
 
 export const g = query({
   args: {},
-  returns: v.null(),
   handler: async (ctx, args) => {
     const result: string = await ctx.runQuery(api.example.f, { name: "Bob" });
     return null;
@@ -227,6 +262,7 @@ Note: `paginationOpts` is an object with the following properties:
 - Always define your schema in `convex/schema.ts`.
 - Always import the schema definition functions from `convex/server`:
 - System fields are automatically added to all documents and are prefixed with an underscore. The two system fields that are automatically added to all documents are `_creationTime` which has the validator `v.number()` and `_id` which has the validator `v.id(tableName)`.
+- **NEVER** manually specify `_id` or `_creationTime` in table definitions - these are automatically added by Convex
 - Always include all index fields in the index name. For example, if an index is defined as `["field1", "field2"]`, the index name should be "by_field1_and_field2".
 - Index fields must be queried in the same order they are defined. If you want to be able to query by "field1" then "field2" and by "field2" then "field1", you must create separate indexes.
 
@@ -241,7 +277,6 @@ import { Doc, Id } from "./_generated/dataModel";
 
 export const exampleQuery = query({
   args: { userIds: v.array(v.id("users")) },
-  returns: v.record(v.id("users"), v.string()),
   handler: async (ctx, args) => {
     const idToUsername: Record<Id<"users">, string> = {};
     for (const userId of args.userIds) {
@@ -302,7 +337,6 @@ import { action } from "./_generated/server";
 
 export const exampleAction = action({
   args: {},
-  returns: v.null(),
   handler: async (ctx, args) => {
     console.log("This action does not return anything");
     return null;
@@ -325,7 +359,6 @@ import { internalAction } from "./_generated/server";
 
 const empty = internalAction({
   args: {},
-  returns: v.null(),
   handler: async (ctx, args) => {
     console.log("empty");
   },
@@ -364,7 +397,6 @@ type FileMetadata = {
 
 export const exampleQuery = query({
     args: { fileId: v.id("_storage") },
-    returns: v.null(),
     handler: async (ctx, args) => {
         const metadata: FileMetadata | null = await ctx.db.system.get(args.fileId);
         console.log(metadata);
